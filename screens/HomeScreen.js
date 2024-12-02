@@ -1,108 +1,93 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Image,
-  Button,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import useFetch from "../hooks/useFetch";
 
-const HomeScreen = ({ navigation }) => {
+const HomeScreen = () => {
   const {
-    data: products,
+    data: responseData,
     loading,
     error,
-  } = useFetch(
-    "https://simple-grocery-store-api.online/products",
-    "productsData"
-  );
+  } = useFetch("https://api.alquran.cloud/v1/surah", "surahData");
 
-  const [favorites, setFavorites] = useState([]);
-  const [likedItems, setLikedItems] = useState({});
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSurahNumber, setSelectedSurahNumber] = useState(null);
+  const [ayahs, setAyahs] = useState([]);
 
-  useEffect(() => {
-    const loadFavorites = async () => {
-      try {
-        const storedFavorites = await AsyncStorage.getItem("favorites");
-        if (storedFavorites) {
-          setFavorites(JSON.parse(storedFavorites));
-        }
-      } catch (error) {
-        console.error("Failed to load favorites from storage:", error);
-      }
-    };
-
-    loadFavorites();
-  }, []);
-
-  const toggleLike = (item) => {
-    setLikedItems((prevLikedItems) => {
-      const isLiked = prevLikedItems[item.id] || false;
-      const newLikedItems = { ...prevLikedItems, [item.id]: !isLiked };
-
-      if (!isLiked) {
-        setFavorites((prevFavorites) => {
-          const updatedFavorites = [...prevFavorites, item];
-          saveFavoritesToStorage(updatedFavorites);
-          return updatedFavorites;
-        });
-      } else {
-        setFavorites((prevFavorites) => {
-          const updatedFavorites = prevFavorites.filter(
-            (fav) => fav.id !== item.id
-          );
-          saveFavoritesToStorage(updatedFavorites);
-          return updatedFavorites;
-        });
-      }
-      return newLikedItems;
-    });
-  };
-
-  const saveFavoritesToStorage = async (updatedFavorites) => {
+  // Function to fetch Ayahs for a selected Surah
+  const fetchAyahs = async (surahNumber) => {
     try {
-      await AsyncStorage.setItem("favorites", JSON.stringify(updatedFavorites));
+      const response = await fetch(
+        `https://api.alquran.cloud/v1/surah/${surahNumber}`
+      );
+      const data = await response.json();
+      if (data && data.data) {
+        // Display the first 6 Ayahs
+        setAyahs(data.data.ayahs.slice(0, 6));
+      }
     } catch (error) {
-      console.error("Failed to save favorites:", error);
+      console.error("Error fetching Ayahs:", error);
     }
   };
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const renderProduct = ({ item }) => {
-    const isLiked = likedItems[item.id] || false;
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => navigation.navigate("Detail", item)}
-      >
-        <Image
-          source={{ uri: item.image || "https://via.placeholder.com/150" }}
-          style={styles.productImage}
-        />
-        <View style={styles.textContainer}>
-          <Text style={styles.name}>{item.name || "N/A"}</Text>
-          <Text style={styles.price}>${item.price || "N/A"} per piece</Text>
-          <TouchableOpacity onPress={() => toggleLike(item)}>
-            <Text style={[styles.likeButton, isLiked && styles.liked]}>
-              {isLiked ? "❤️" : "🤍"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
+  // Handle Surah selection
+  const handleSurahPress = (item) => {
+    if (selectedSurahNumber === item.number) {
+      // If already selected, deselect
+      setSelectedSurahNumber(null);
+      setAyahs([]);
+    } else {
+      // Select and fetch Ayahs
+      setSelectedSurahNumber(item.number);
+      fetchAyahs(item.number);
+    }
   };
 
-  const navigateToCart = () => {
-    navigation.navigate("Cart");
+  const renderSurah = ({ item }) => {
+    return (
+      <View>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => handleSurahPress(item)} // Update the selected item and fetch Ayahs
+        >
+          <View style={styles.textContainer}>
+            <Text style={styles.surahNumber}>{item.number}</Text>
+            <View style={styles.surahInfo}>
+              <Text style={styles.name}>{item.englishName || "N/A"}</Text>
+              <Text style={styles.details}>
+                {item.revelationType} - {item.numberOfAyahs} Ayahs
+              </Text>
+            </View>
+            <Text style={styles.arabicName}>{item.name || "N/A"}</Text>
+          </View>
+        </TouchableOpacity>
+        {selectedSurahNumber === item.number && (
+          <View style={styles.ayahListContainer}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => handleSurahPress(item)} // Close the Ayah list
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+            <FlatList
+              data={ayahs}
+              renderItem={({ item }) => (
+                <View style={styles.ayahContainer}>
+                  <Text style={styles.ayahText}>{item.text}</Text>
+                </View>
+              )}
+              keyExtractor={(ayah) => ayah.number.toString()}
+              contentContainerStyle={styles.ayahFlatListContainer}
+            />
+          </View>
+        )}
+      </View>
+    );
   };
 
   if (loading) {
@@ -123,18 +108,26 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.searchBar}
-        placeholder="Search for products"
-        value={searchQuery}
-        onChangeText={(text) => setSearchQuery(text)}
-      />
-      <Button title="Go to Cart" onPress={navigateToCart} />
+      <View style={styles.header}>
+        <Text style={styles.greeting}>Assalamu Alaikum</Text>
+        <Text style={styles.userName}>Tanvir Ahassan</Text>
+        <View style={styles.lastReadContainer}>
+          <Text style={styles.lastReadTitle}>Current Selection</Text>
+          <Text style={styles.lastReadSurah}>
+            {selectedSurahNumber
+              ? `Surah ${selectedSurahNumber}`
+              : "No Surah Selected"}
+          </Text>
+          <Image
+            source={{ uri: "https://example.com/book-icon.png" }} // Replace with your book icon URL or local asset
+            style={styles.bookIcon}
+          />
+        </View>
+      </View>
       <FlatList
-        data={filteredProducts.slice(0, 50)}
-        renderItem={renderProduct}
-        keyExtractor={(item) => item.id.toString()}
-        numColumns={2}
+        data={responseData?.data || []}
+        renderItem={renderSurah}
+        keyExtractor={(item) => item.number.toString()}
         contentContainerStyle={styles.flatListContainer}
       />
     </View>
@@ -145,55 +138,102 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#f2f2f2",
+    backgroundColor: "#f9f7fd",
   },
-  searchBar: {
-    height: 40,
-    borderColor: "#ccc",
-    borderWidth: 1,
+  header: {
+    padding: 16,
+    backgroundColor: "#6a4bbc",
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  greeting: {
+    color: "#fff",
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  userName: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  lastReadContainer: {
+    marginTop: 16,
+    backgroundColor: "#816bce",
     borderRadius: 8,
-    marginBottom: 10,
-    paddingHorizontal: 8,
-    backgroundColor: "#fff",
+    padding: 16,
+    alignItems: "center",
+  },
+  lastReadTitle: {
+    color: "#f0e8ff",
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  lastReadSurah: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  bookIcon: {
+    width: 40,
+    height: 40,
   },
   flatListContainer: {
     paddingBottom: 16,
   },
   card: {
-    flex: 1,
     backgroundColor: "#fff",
-    margin: 8,
+    marginBottom: 12,
     borderRadius: 8,
     padding: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 3,
-  },
-  productImage: {
-    width: 100,
-    height: 100,
-    resizeMode: "contain",
-    marginBottom: 8,
+    elevation: 2,
   },
   textContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+  },
+  surahNumber: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#6a4bbc",
+  },
+  surahInfo: {
+    flex: 1,
+    marginLeft: 16,
   },
   name: {
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 4,
+    color: "#333",
   },
-  price: {
-    fontSize: 14,
-    color: "#888",
-    marginBottom: 4,
+  details: {
+    fontSize: 12,
+    color: "#666",
   },
-  likeButton: {
+  arabicName: {
     fontSize: 18,
-    marginTop: 4,
+    color: "#6a4bbc",
+    fontWeight: "bold",
   },
-  liked: {
-    color: "red",
+  ayahListContainer: {
+    backgroundColor: "#f3f1f9",
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  closeButton: {
+    alignSelf: "flex-end",
+  },
+  closeButtonText: {
+    color: "#6a4bbc",
+    fontSize: 16,
+  },
+  ayahContainer: {
+    marginBottom: 8,
+  },
+  ayahText: {
+    fontSize: 14,
+    color: "#333",
   },
 });
 
